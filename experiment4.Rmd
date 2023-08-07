@@ -1,0 +1,302 @@
+---
+title: "Experiment 3"
+date: "`r format(Sys.Date())`"
+output: word_document
+---
+
+## Summary Report - Comparison of GFP expression in eyes after single or triple injection of nanoplasmid in retina and RPE and choroid.
+
+
+## Introduction:
+Minipigs received single or triple suprachoroidal injections of 50 µl of nanoplasmid containing GFP. Two weeks later, retina and RPE/choroid were collected for ELISA assay.
+Group 1: Single suprachoroidal injection of 50 µl of nanoplasmid containing GFP 
+Group 2: Triple suprachoroidal injection of 50 µl of nanoplasmid containing GFP
+We would like to compare: 
+(A) the concentration of GFP in the retina after single injection versus triple injections;
+(B) the concentration of GFP in the RPE/choroid after single injection versus triple injections.
+
+
+## Methods:
+Minipigs were divided into two groups: Group 1 received a single suprachoroidal injection of 50 µl of nanoplasmid containing GFP, while Group 2 received three Triple suprachoroidal injection of 50 µl of nanoplasmid containing GFP. We fitted linear mixed-effects models to compare the GFP concentration in the retina and RPE/choroid after after single injection versus triple injections.
+
+
+**The final linear mixed-effects model can be represented as follows:**
+
+
+\[\text{Assay (pg/mg/protein)} = \beta_0 + \beta_1 \times \text{Injection}  +b_{\text{Pig_ID/Eye}} + \varepsilon \]
+
+
+**where:**
+
+
+\(\text{Assay (pg/mg/protein)}\) represents the response variable, i.e., the measured assay level for the observation.
+
+\(\beta_0\) is the intercept of the model, representing the baseline assay level when both \text{Injection} and \text{Eye} are zero.
+
+\(\beta_1\) is the coefficient for the variable Injection, representing its fixed effect on the response. It indicates how the assay level changes with a one-unit increase in the Injection variable while holding other variables constant.
+
+\(b_{\text{Pig_ID/Eye}}\) represents the random intercept for each unique value of the variable Pig_ID, accounting for the individual variability between pigs. This term allows the baseline assay level to vary across different pigs, irrespective of their eye conditions.
+
+\(\varepsilon\) is the error term, capturing the variability not accounted for by the model. It represents the residual variation in the assay level that is not explained by the fixed effects or random intercepts.
+
+
+```{r, warning=FALSE,echo=FALSE,results='markup'}
+setwd("C:/Users/sse6/Desktop/New folder")
+
+library(readxl)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+library(lmerTest)
+library(knitr)
+library(kableExtra)
+library(car)
+# Specify the file path and name
+file_path <- "Experiment 4.xlsx"
+df<- read_excel(file_path,sheet="RPE NP single vs triple")
+
+
+df1 <- df[-1,1:8] 
+df1 <- df1[!df1$...1 %in% "Average", ]
+df2 <- df[-1,10:17]
+df2<- df2[!df2$...10 %in% "Average", ]
+# New column names
+new_column_names <- c("Item","Pig_ID", "Eye", "Injection", "Volume", "Tissue", "Position", "Assay (pg/mg/protein)")
+# Reassign the column names
+colnames(df1) <- new_column_names
+colnames(df2) <- new_column_names
+
+data<-rbind(df1,df2)
+# Replace "NA" strings with actual NA values
+data[data == "NA"] <- NA
+# Remove rows where all cells are NA (empty rows)
+data <- data[!rowSums(is.na(data)) == ncol(data), ]
+
+
+
+ggplot(data, aes(x = Injection, y = `Assay (pg/mg/protein)`, fill = Injection)) +
+  geom_boxplot() +
+  labs(title = "GFP Concentration in RPE by Injection Type",
+       x = "Injection Type",
+       y = "GFP Concentration (pg/mg/protein)") +
+  theme_minimal()
+# Fit the linear mixed-effects model with "Pig_ID" and "Eye" as random effects
+ggplot(data, aes(x = Eye, y = `Assay (pg/mg/protein)`, fill = Eye)) +
+  geom_boxplot() +
+  labs(title = "GFP Concentration in RPE by Eye",
+       x = "Eye",
+       y = "GFP Concentration (pg/mg/protein)") +
+  theme_minimal()
+
+
+
+
+model <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1|Pig_ID), data = data)
+model1 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1 | Pig_ID/Eye), data = data)
+model2 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1|Pig_ID) + (1|Eye), data = data)
+model3 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1|Pig_ID), data = data)
+model4 <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1 | Pig_ID/Eye), data = data)
+model5 <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1 | Pig_ID)+(1|Eye), data = data)
+
+model_comparison <- data.frame(
+  Models = c("model", "model1", "model2", "model3", "model4", "model5"),
+  AIC = c(AIC(model), AIC(model1), AIC(model2), AIC(model3), AIC(model4), AIC(model5)),
+  BIC = c(BIC(model), BIC(model1), BIC(model2), BIC(model3), BIC(model4), BIC(model5))
+)
+
+model_comparison
+cat("\n\n") 
+print("RPE plasmid vs nano model result")
+# Print the model summary
+summary(model)
+# Extract the fixed-effect coefficients
+coefficients <- fixef(model)[-1]
+# Extract the p-values for fixed-effect coefficients from the summary
+p_values <- summary(model)$coefficients[, "Pr(>|t|)"][-1]
+#Calculate the 95% confidence intervals for fixed-effect coefficients
+conf_intervals <- confint(model)
+# Display the confidence intervals for fixed-effect coefficients
+conf_intervals  <- conf_intervals [c("Injectiontriple","Eyeright eye" ), ]
+# Calculate the mean values for each group (group 1 and group 2)
+group_means <- aggregate(`Assay (pg/mg/protein)` ~ Injection, data = data, mean)
+# Calculate the difference between Group 1 and Group 2 means
+difference <- diff(group_means$`Assay (pg/mg/protein)`)
+result_df_RPF <- data.frame(
+  Item = "RPE",
+  single_Avg = group_means$`Assay (pg/mg/protein)`[1],
+  triple_Avg = group_means$`Assay (pg/mg/protein)`[2],
+  Difference = difference,
+  p_values = p_values,
+  CI_Lower = conf_intervals[2, "2.5 %"],
+  CI_Upper = conf_intervals[2, "97.5 %"]
+)
+ 
+
+coefficients <- fixef(model1)[-1]
+# Extract the p-values for fixed-effect coefficients from the summary
+p_values <- summary(model1)$coefficients[, "Pr(>|t|)"][-1]
+#Calculate the 95% confidence intervals for fixed-effect coefficients
+conf_intervals <- confint(model1)
+# Display the confidence intervals for fixed-effect coefficients
+conf_intervals  <- conf_intervals [c("Injectiontriple"), ]
+
+result_df_RPF2 <- data.frame(
+  Item = "RPE",
+  single_Avg = group_means$`Assay (pg/mg/protein)`[1],
+  triple_Avg = group_means$`Assay (pg/mg/protein)`[2],
+  Difference = difference,
+  p_values = p_values,
+  CI_Lower = conf_intervals[ "2.5 %"],
+  CI_Upper = conf_intervals[ "97.5 %"]
+)
+# 
+
+```
+
+```{r, warning=FALSE,echo=FALSE,results='markup'}
+
+df<- read_excel(file_path,sheet="Retina NP single vs triple")
+
+df1 <- df[-1,1:8] 
+df1 <- df1[!df1$...1 %in% "Average", ]
+df2 <- df[-1,10:17]
+df2<- df2[!df2$...10 %in% "Average", ]
+# New column names
+new_column_names <- c("Item","Pig_ID", "Eye", "Injection", "Volume", "Tissue", "Position", "Assay (pg/mg/protein)")
+
+# Reassign the column names
+colnames(df1) <- new_column_names
+colnames(df2) <- new_column_names
+
+data<-rbind(df1,df2)
+# Replace "NA" strings with actual NA values
+data[data == "NA"] <- NA
+# Remove rows where all cells are NA (empty rows)
+data <- data[!rowSums(is.na(data)) == ncol(data), ]
+
+
+ggplot(data, aes(x = Injection, y = `Assay (pg/mg/protein)`, fill = Injection)) +
+  geom_boxplot() +
+  labs(title = "GFP Concentration in Retina by Injection Type",
+       x = "Injection Type",
+       y = "GFP Concentration (pg/mg/protein)") +
+  theme_minimal()
+# Fit the linear mixed-effects model with "Pig_ID" and "Eye" as random effects
+ggplot(data, aes(x = Eye, y = `Assay (pg/mg/protein)`, fill = Eye)) +
+  geom_boxplot() +
+  labs(title = "GFP Concentration in Retina by Eye",
+       x = "Eye",
+       y = "GFP Concentration (pg/mg/protein)") +
+  theme_minimal()
+
+
+
+
+# Fit the linear mixed-effects model with "Pig_ID" and "Eye" as random effects
+
+model <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1|Pig_ID), data = data)
+model1 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1 | Pig_ID/Eye), data = data)
+model2 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1|Pig_ID) + (1|Eye), data = data)
+model3 <- lmer(`Assay (pg/mg/protein)` ~ Injection + (1|Pig_ID), data = data)
+model4 <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1 | Pig_ID/Eye), data = data)
+model5 <- lmer(`Assay (pg/mg/protein)` ~ Injection + Eye+ (1 | Pig_ID)+(1|Eye), data = data)
+
+model_comparison <- data.frame(
+  Models = c("model", "model1", "model2", "model3", "model4", "model5"),
+  AIC = c(AIC(model), AIC(model1), AIC(model2), AIC(model3), AIC(model4), AIC(model5)),
+  BIC = c(BIC(model), BIC(model1), BIC(model2), BIC(model3), BIC(model4), BIC(model5))
+)
+
+model_comparison
+print("Retina plasmid vs nano model result")
+summary(model)
+
+# Extract the fixed-effect coefficients
+coefficients <- fixef(model)[-1]
+# Extract the p-values for fixed-effect coefficients from the summary
+p_values <- summary(model)$coefficients[, "Pr(>|t|)"][-1]
+#Calculate the 95% confidence intervals for fixed-effect coefficients
+conf_intervals <- confint(model)
+# Display the confidence intervals for fixed-effect coefficients
+conf_intervals  <- conf_intervals [c("Injectiontriple","Eyeright eye" ), ]
+# Calculate the mean values for each group (group 1 and group 2)
+group_means <- aggregate(`Assay (pg/mg/protein)` ~ Injection, data = data, mean)
+# Calculate the difference between Group 1 and Group 2 means
+difference <- diff(group_means$`Assay (pg/mg/protein)`)
+
+result_df<- data.frame(
+  Item = "Retina",
+  single_Avg = group_means$`Assay (pg/mg/protein)`[1],
+  triple_Avg = group_means$`Assay (pg/mg/protein)`[2],
+  Difference = difference,
+  p_values = p_values,
+  CI_Lower = conf_intervals[2, "2.5 %"],
+  CI_Upper = conf_intervals[2, "97.5 %"]
+)
+
+ 
+coefficients <- fixef(model1)[-1]
+# Extract the p-values for fixed-effect coefficients from the summary
+p_values <- summary(model1)$coefficients[, "Pr(>|t|)"][-1]
+#Calculate the 95% confidence intervals for fixed-effect coefficients
+conf_intervals <- confint(model1)
+# Display the confidence intervals for fixed-effect coefficients
+conf_intervals  <- conf_intervals [c("Injectiontriple"), ]
+# Cal
+# residuals <- resid(model)
+# hist(residual
+
+
+result_df2 <- data.frame(
+  Item = "Retina",
+   single_Avg = group_means$`Assay (pg/mg/protein)`[1],
+  triple_Avg = group_means$`Assay (pg/mg/protein)`[2],
+  Difference = difference,
+  p_values = p_values,
+  CI_Lower = conf_intervals[ "2.5 %"],
+  CI_Upper = conf_intervals[ "97.5 %"]
+)
+
+result<-rbind(result_df_RPF,result_df)
+result2<-rbind(result_df_RPF2,result_df2)
+
+library(dplyr)
+
+result2 <- result2 %>%
+  mutate_at(vars(single_Avg, triple_Avg, Difference, p_values, CI_Lower, CI_Upper), round, 2)
+
+# Assuming "result" is your dataset
+result <- result %>%
+  mutate_at(vars(single_Avg, triple_Avg, Difference, p_values, CI_Lower, CI_Upper), round, 2)
+
+# Now, 'result' contains the numeric columns rounded to two decimal places
+
+```
+
+## Results:
+The results of the linear mixed-effects models \[\text{Assay (pg/mg/protein)} = \beta_0 + \beta_1 \times \text{Injection} +\beta_2 \times \text{Eye} +b_{\text{Pig_ID}} + \varepsilon \]as follows:
+
+```{r, results='asis',echo=FALSE,warning=FALSE}
+# knitr::kable(result, format = "markdown")
+
+library(kableExtra)
+
+result %>%
+  kable(format = "markdown", digits = 2) %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+```
+The results of the linear mixed-effects models
+\[\text{Assay (pg/mg/protein)} = \beta_0 + \beta_1 \times \text{Injection} +b_{\text{Pig_ID/Eye}} + \varepsilon \]as follows:
+```{r, results='asis',echo=FALSE,warning=FALSE}
+# knitr::kable(result, format = "markdown")
+
+library(kableExtra)
+
+result2 %>%
+  kable(format = "markdown", digits = 2) %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+
+```
+ 
+ 
